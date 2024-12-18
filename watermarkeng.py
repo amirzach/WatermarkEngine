@@ -20,8 +20,8 @@ def embed_watermark_dct_dwt(host_image, watermark, alpha=10):
     h, w, _ = host_image.shape
     watermarked_image = host_image.copy().astype(float)
 
-    # Resize watermark to match the dimensions of host image channels
-    watermark_resized = cv2.resize(watermark, (w // 8, h // 8))
+    # Dynamically resize watermark to match the dimensions of host image channels
+    watermark_resized = cv2.resize(watermark, (w // 8, h // 8), interpolation=cv2.INTER_AREA)
     watermark_binary = (watermark_resized > 128).astype(int)  # Convert to binary
 
     # Process each color channel
@@ -35,6 +35,9 @@ def embed_watermark_dct_dwt(host_image, watermark, alpha=10):
         for i in range(0, h_LL, 8):
             for j in range(0, w_LL, 8):
                 block = LL[i:i+8, j:j+8]
+                if block.shape[0] < 8 or block.shape[1] < 8:
+                    continue  # Skip blocks smaller than 8x8
+
                 dct_block = dct2(block)
 
                 # Embed watermark in the (4, 4) coefficient
@@ -64,11 +67,17 @@ def extract_watermark_dct_dwt(host_image, watermarked_image, alpha=10):
     h_LL, w_LL = LL_host.shape
     for i in range(0, h_LL, 8):
         for j in range(0, w_LL, 8):
-            orig_block = dct2(LL_host[i:i+8, j:j+8])
-            watermarked_block = dct2(LL_watermarked[i:i+8, j:j+8])
+            orig_block = LL_host[i:i+8, j:j+8]
+            watermarked_block = LL_watermarked[i:i+8, j:j+8]
+
+            if orig_block.shape[0] < 8 or orig_block.shape[1] < 8:
+                continue  # Skip blocks smaller than 8x8
+
+            orig_dct_block = dct2(orig_block)
+            watermarked_dct_block = dct2(watermarked_block)
 
             # Extract the watermark bit
-            difference = (watermarked_block[4, 4] - orig_block[4, 4])
+            difference = (watermarked_dct_block[4, 4] - orig_dct_block[4, 4])
             extracted_watermark[i // 8, j // 8] = round(difference / alpha)
 
     # Scale the extracted watermark back to 0-255
@@ -76,19 +85,26 @@ def extract_watermark_dct_dwt(host_image, watermarked_image, alpha=10):
 
 # Main Execution
 if __name__ == "__main__":
-    host_image_path = r"C:\Users\User\host_image.png"
-    watermark_image_path = r"C:\Users\User\watermark_image.png"
+    host_image_path = r"C:\Users\User\tiger.jpg"
+    watermark_image_path = r"C:\Users\User\watermark.jpg"
 
     # Load the host and watermark images
     host_image = cv2.imread(host_image_path)  # Load as color image
+    if host_image is None:
+        raise ValueError("Host image not found or invalid format.")
+
     watermark_image = cv2.imread(watermark_image_path, cv2.IMREAD_GRAYSCALE)
+    if watermark_image is None:
+        raise ValueError("Watermark image not found or invalid format.")
 
     # Embed the watermark
-    watermarked_image = embed_watermark_dct_dwt(host_image, watermark_image, alpha=200)
-    cv2.imwrite(r"C:\Users\User\watermarked_image.png", watermarked_image)
-    print("Watermark embedded and saved as 'watermarked_image.png' in User.")
+    watermarked_image = embed_watermark_dct_dwt(host_image, watermark_image, alpha=20)
+    output_path = r"C:\Users\User\watermarked_image.png"
+    cv2.imwrite(output_path, watermarked_image)
+    print(f"Watermark embedded and saved as '{output_path}'.")
 
     # Extract the watermark
-    extracted_watermark = extract_watermark_dct_dwt(host_image, watermarked_image, alpha=200)
-    cv2.imwrite(r"C:\Users\User\extracted_watermark.jpg", extracted_watermark)
-    print("Watermark extracted and saved as 'extracted_watermark.jpg' in User.")
+    extracted_watermark = extract_watermark_dct_dwt(host_image, watermarked_image, alpha=20)
+    extracted_path = r"C:\Users\User\extracted_watermark.png"
+    cv2.imwrite(extracted_path, extracted_watermark)
+    print(f"Watermark extracted and saved as '{extracted_path}'.")
